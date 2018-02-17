@@ -1,0 +1,279 @@
+
+##Exploratory Analysis of Survey Data
+
+###Introduction
+
+In an endless search for a competitive edge, companies are always looking for new ways to identify who their customers are, and what their customers are like. The ability to target individuals based on their demographic characteristics and their consumption patterns is referred to as targeted marketing. Due to the explosion of smartphones and online consumption, targeted marketing has become highly accessible. 
+
+One of the largest forms of consumption is entertainment---video being one of the most popular. Due to the increasing popularity of OTT streaming services like Hulu and YouTube, users log in before streaming content, meaning their identity is known, allowing the streaming service to serve highly targeted ads based on their personal profile and viewing history. Of course, cookies and IP addresses can be used to monitor users to a certain extent, but this limits the amount of information that can be assumed about them. 
+
+Marketing research firms continually search for new factors to explain consumer spending. For example, appearance-related spending is an important metric for segmenting high and low-value customers in the fashion and cosmetic industries. And with the increasing use of OTT services coupled with the high consumption of video content, understanding whether factors like movie preferences can explain spending habits is a worthwhile line of research.
+
+Streaming services already have their customers segmented by viewing preference, and brands may for example purchase ad space that targets segments with certain movie viewing histories and/or demographics. Thus, if movie genre preferences were obtained along with ratings about appearance-related spending, it is worth analyzing for possible insight that could potentially aid companies in the fashion and cosmetic industries. 
+
+In the following section I simulate such an analysis with survey data that was downloaded from [Kaggle]("https://www.kaggle.com"), which is a website that hosts datasets and competitions related to machine learning and data science. The [Young People Survey]("https://www.kaggle.com/miroslavsabo/young-people-survey") consists of movie genre ratings, as well as ratings about individual spending on appearance-related products. A total of 1010 Slovakian young adults were surveyed.
+
+###Programming and Statistics
+
+The analysis is performed with R and utilizes 3 different statistical techniques, which are conducted in the following order: 
+
+1. Principal Components Analysis (PCA)
+2. K-Means Cluster Analysis 
+3. Kruskal-Wallis Rank Sum Test 
+
+The plan is to first summarize the movie genre ratings into principal components. The component scores for each respondent will then be used to segment the respondents into groups via cluster analysis. Once each respondent is assigned to a group (cluster), they are directly compared in terms of appearance-related spending. If one group reports a much higher degree of spending compared to the others, it would suggest that viewers with similar movie viewing patterns should be targeted by fashion and cosmetic companies.
+
+###Preparing for Analysis
+
+Each analysis begins the same---load the relevant libraries and read in the data, which in this case is a csv file that is saved into the data frame 'raw_data'. 
+
+```{r, message=FALSE}
+library(dplyr); library(tidyr); library(ggplot2); library(corrplot)
+
+raw_data <- read.csv("young-people-survey/responses.csv")
+```
+
+A data frame 'movie_data' is created to hold the movie preference ratings, as only those variables are used in the PCA and the cluster analysis. The goal is to summarize all of the different genre ratings into a smaller number of components, which is done to extract high-level interpretations of each respondent's movie preferences. 
+
+Each respondent reported their *overall* interest in movies, in addition to their preferences for specific genres. Those reporting a '1' in overall interest were filtered out, for a rating of '1' suggests no interest in movie consumption. A total of 9 respondents had overall movie preference ratings of 1, and a total of 32 cases had missing values, which were also deleted, leaving a total of 969 observations for the analysis. 
+
+```{r}
+movie_data <- raw_data %>%
+  filter(Movies != 1) %>%
+  select(Horror:Action, Spending.on.looks) %>%
+  na.omit()
+
+glimpse(movie_data)
+```
+
+Before running the PCA, a new data frame 'preferences' is defined, which contains only the movie genre ratings, for the final variable of interest---'Spending.on.looks', is not included in the PCA or the cluster analysis. 
+
+```{r}
+preferences <- movie_data %>%
+  select(-Spending.on.looks) 
+```
+
+###Predictor Distributions
+
+To visualize the overall preferences of the respondents, the frequency of each rating is plotted across the different movie genres. Comedy is clearly the most preferred genre---western movies are the least preferred. 
+
+```{r}
+movie_data_long <-  gather(data=movie_data, key=MovieGenre, value=Rating, Horror:Spending.on.looks)
+
+movie_data_long %>% 
+  ggplot(aes(x=Rating)) + 
+  geom_histogram(binwidth=1, color="red", fill="grey") + 
+  scale_fill_hue(l=60) +
+  facet_wrap(~MovieGenre) + 
+  theme(legend.position="none") + 
+  theme_minimal() +
+  labs(y="Count", 
+       x="Rating", 
+       color="Data Type", 
+       title="Rating Counts Across Movie Genres", 
+       subtitle="N = 969", 
+       caption="Source: https://www.kaggle.com/miroslavsabo/young-people-survey")
+```
+
+###Polychoric Correlations 
+
+Ordinal data is numeric, but it is not continuous, therefore, the PCA will be based on polychoric correlations, rather than Pearson r correlations. 
+
+```{r, message=FALSE}
+library(psych)
+polycor <- preferences %>%
+  polychoric()
+```
+
+The polychoric correlation matrix can be visualized below. The redder/more narrow the ellipse, the more positively correlated the two variables are. And the blacker/more narrow the ellipse, the greater the negative correlation. Fantasy fairy tales and animated movies appear strongly correlated, as are thriller and horror movies---both of which correlate in the positive direction. 
+
+```{r}
+col1 <- colorRampPalette(c("black","grey","red"))
+polycor$rho %>%
+  corrplot(order = "hclust", 
+           tl.col='black',
+           col = col1(100),
+           tl.cex=.75, 
+           method = "ellipse") 
+```
+
+###PCA Component Selection
+
+Before running the PCA, the number of components must first be selected. To do this, a PCA model with 11 components is created, which matches the number movie genres. The eigenvalue for each component is a marker of how much variance it accounts for due to its inclusion into the model. The average eigenvalue of all 11 components will equal 1, therefore, only components with eigenvalues greater than 1 (above average) are selected for the final PCA 
+
+```{r}
+pca_fit <- principal(r = polycor$rho, nfactors = 11, rotate = "Promax")
+```
+
+The dashed blue line marks the final component with an eigenvalue greater than 1. Therefore, the final PCA model will have 3 specified components. 
+
+```{r}
+as.data.frame(pca_fit$values) %>%
+  ggplot(aes(x=1:11, y=pca_fit$values)) + 
+  geom_line() + geom_vline(xintercept=3, linetype="dashed", color="red") +
+  geom_point(color="red", size=3) +
+  scale_x_continuous(breaks = unique(1:11)) +
+  theme_minimal() +
+  theme(axis.text=element_text(size=12), text=element_text(size=12)) +
+  labs(x = "Components", 
+       y = "Eigenvalues", 
+       title = "Eigenvalues for Estimated Components", 
+       caption="Source: https://www.kaggle.com/miroslavsabo/young-people-survey") 
+  
+```
+
+###Principal Component Analysis
+
+The final PCA model is defined below, and the individual component scores are created for use in the cluster analysis. The loadings indicate the degree to which each genre preference is associated with a given component. Only correlations above .4 or below -0.4 are considered significant contributors to the component. The following interpretations can be made: 
+
+* **Component 1** represents a preference for Western, War, Documentary, Action, and Sci-Fi movies. This will be called the 'adventure' component, as adventure seems to be the underlying theme connecting these different genres. 
+
+* **Component 2** represents a preference for Fantasy.Fairy.tales, Animated, Romantic, and Comedy movies. We'll call this category 'light-hearted', which seems fitting given the list of movie genres that it includes.
+
+* **Component 3** represents a preference for Horror and Thriller movies, therefore, it will be labeled the 'scary' component. 
+
+These descriptions will assist in the final interpretations of the the cluster analysis.
+
+```{r}
+pca_fit <- principal(r = polycor$rho, nfactors = 3, rotate = "Promax")
+pca_fit$scores <- factor.scores(preferences, pca_fit)
+
+
+```
+
+###Cluster Size Selection
+
+Just like the PCA, the optimal number of clusters must be specified beforehand. In this case the *within sum of squares* (wss) metric is used to select the optimal number of clusters. The wss represents the amount of unexplained variance in the model, therefore, as more clusters are added, the wss reduces. But at some point the reduction begins to flatten out, and at that point the current cluster size should be selected. Seven different cluster analyses were run containing either 1-7 clusters. The wss from each analysis is then saved and plotted below. The optimal cluster size appears to be 3. 
+
+```{r}
+wss <- (nrow(pca_fit$scores$scores)-1)*sum(apply(pca_fit$scores$scores,2,var))
+
+for(i in 1:7) {
+  wss[i] <- sum(kmeans(pca_fit$scores$scores, centers=i)$withinss)
+}
+
+as.data.frame(wss) %>%
+  ggplot(aes(x=1:7, y=wss)) +
+  geom_line() + geom_vline(xintercept=3, linetype="dashed", color="red") +
+  geom_point(color="red", size=3) +
+  scale_x_continuous(breaks = unique(1:7)) +
+  theme_minimal() +
+  theme(axis.text=element_text(size=12), text=element_text(size=12)) +
+  labs(x = "Clusters", 
+       y = "Within Sum of Squares", 
+       title = "Within Sum of Squares Using Different Amounts of Clusters", 
+       caption="Source: https://www.kaggle.com/miroslavsabo/young-people-survey") 
+```
+
+###K-Means Cluster Analysis
+
+K-means clustering performs well under a wide range of conditions, and is one of the most utilized clustering methods. Below the individual PCA scores are submitted to the analysis along with the specification of 3 clusters. In addition, the centers, or the 'centroids' for each of the 3 clusters is reported below. The centroids are represented in 3-D space---spanning across the 3 principal components, each of which is represented by an axis. 
+
+```{r}
+set.seed(88)
+k_means_mod <- kmeans(pca_fit$scores$scores, 3) 
+k_means_mod$centers
+```
+
+###Cluster Plot
+
+To visualize the clustered data, a 3-D scatterplot is used to display the categorized data points across the 3 principal components. The points are color-coated based on their assigned cluster. Like examining the centroids, which represent the center points of each cloud, visualizing the cloud of points as a whole reveals the nature of each cluster with respect to the 3 principal components. 
+(click here to see the interactive version).
+
+Descriptions of each cluster are based on the location of the clouds within each plane of the graph. They are as follows:
+
+* **Cluster 1**: Measures high on component 1 in the positive direction, and measures low on component 2 in the negative direction. For component 3 the points are mostly spread across, and thus don't seem related to the component. Thus individuals in segment 1 have a preference for adventure movies, a dislike for light-hearted movies, and no preference in particular for scary movies. 
+
+* **Cluster 2**: Measures high on component 1 in the negative direction, high on component 2 in the positive direction, and high onto component 3 in the negative direction. This suggests that the blue segment---cluster 2, prefers light-hearted movies and dislikes adventure and scary movies. 
+
+* **Cluster 3**: Measures high on components 1, 2 and 3---all in the positive direction, meaning this segment prefers all categories. 
+
+```{r, message=FALSE}
+library(plotly)
+
+plot_ly(as.data.frame(pca_fit$scores$scores), x = ~RC2, y = ~RC1, z = ~RC3, 
+        color = ~as.factor(k_means_mod$cluster), 
+        colors = c("red", "grey", "black")) %>%
+  add_markers() %>%
+  layout(scene = list(xaxis = list(title = 'PC 2'),
+                     yaxis = list(title = 'PC 1'),
+                     zaxis = list(title = 'PC 3')), 
+         title="Segments x Principal Components")
+```
+
+###Kruskal-Wallis Rank Sum Test
+
+Now that we have the respondents grouped, or segmented, we can perform the final step of the analysis, which is to compare the clusters in terms of their self-rated appearance spending. To do this, the Kruskal-Wallis Rank Sum Test is used, which tests group differences in ordinal data. The results below indicate that there is at least on group difference among the 3 groups (p < 0.05). 
+
+```{r, warning=FALSE}
+library(PMCMRplus)
+krus_mod <- kruskalTest(Spending.on.looks ~ k_means_mod$cluster, movie_data)
+krus_mod
+```
+
+To determine which of the 3 groups differ, the data are submitted to *Nemenyi’s non-parametric all-pairs comparison test for Kruskal-type ranked data*. As seen below, the difference is only between groups 1 and 2---the other comparisons did not reach significance. 
+
+```{r, message=FALSE, warning=FALSE}
+post_krus <- kwAllPairsNemenyiTest(movie_data$Spending.on.looks, k_means_mod$cluster, dist="Chisquare")
+post_krus
+```
+
+To visualize the difference between clusters 1 and 2, the proportions of the different types of responses within each cluster are plotted below. Cluster 2 gave the highest proportion of 4 and 5 ratings, with the proportion of '5' ratings being much higher compared to cluster 1. In addition, cluster 1 has a higher proportion of 1, 2 and 3 ratings compared to cluster 2.
+
+```{r}
+movie_clust <- cbind(na.omit(movie_data), k_means_mod$cluster)
+names(movie_clust)[names(movie_clust) == "k_means_mod$cluster"] <- "Cluster"
+
+movie_clust %>%
+  group_by(Cluster, Spending.on.looks) %>%
+  summarise (n = n()) %>%
+  mutate(freq = n / sum(n)) %>% 
+  ggplot(aes(x=Spending.on.looks,y=freq,fill=as.factor(Cluster))) + 
+  geom_bar(stat="identity", position=position_dodge()) + 
+  scale_fill_manual("Segments", values = c("red", "grey", "black")) + 
+  theme_minimal()  +
+  labs(y="Proportion Selected", 
+       x="Spending on Looks", 
+       title="Proportion of Ratings for 'Spending on Looks' Across Segments", 
+       subtitle="N = 969", 
+       caption="Source: https://www.kaggle.com/miroslavsabo/young-people-survey")
+
+```
+
+Another way of visualizing the results is to use a measure of central tendency to describe the ordered categories, 1-5. The average spending on looks rating was calculated across each cluster, and we see that cluster 2 is the greatest, corroborating the previous observation that was just observed. 
+
+```{r}
+movie_clust %>%
+  group_by(Cluster) %>%
+  summarize(avg_spend_rating=mean(Spending.on.looks)) %>% 
+  ggplot(aes(x=Cluster, y=avg_spend_rating, fill=as.factor(Cluster))) + 
+  geom_bar(stat="identity", position=position_dodge()) + 
+  scale_fill_manual(values=c("red", "grey", "black")) +
+  theme_minimal() +
+  theme(axis.text=element_text(size=12), text=element_text(size=12)) +
+  labs(fill = "Segments", 
+       x = "Segments", 
+       y = "Mean Appearance Spending (Ordinal Ratings 1-5)", 
+       title = "Average Rating of Appearance Spending Across Segments", 
+       subtitle="N = 969", 
+       caption="Source: https://www.kaggle.com/miroslavsabo/young-people-survey")
+```
+
+###Results Summary
+
+Ordinal ratings about movie preferences were used to extract insight about possible differences in spending on one's appearance. Preference ratings for 11 movie genres were summarized into 3 principal components, which were then used to segment the survey respondents into 3 groups. The groups were then directly compared in terms of their appearance-related spending. 
+
+Segment 2---the group that preferred light-hearted movies (and disliked adventure), reported higher ratings of appearance-related spending compared to segment 1---the group that preferred adventure movies (and disliked light-hearted). As for cluster 3, they preferred all movie genres, and didn't differ from either segments 1 or 2 in appearance-related spending. 
+
+###Conclusion
+
+Unfortunately, the data are not too informative from a practical perspective. The insight that segment 2 rates higher on appearance spending compared to segment 1 is not all that interpretable, as segment 2 does not differ statistically from segment 3, and there is no statistical difference between segment 3 and segment 1. Moreover, in the '5' and '4' categories of appearance spending, group differences of only 6% to 8% were observed, respectively, between segments 1 and 2. Moreover, the average appearance spending between segments 1 and 2---when the ordinal variables were averaged, was also very close.
+
+Finally, assuming the magnitude of the differences were much greater, and that the result were more interpretable, they would in theory only generalize to Slovakian young adults. Moreover, the sampling was most likely not 'random' per se, yet no sampling method is perfect, highlighting the for multiple findings from different angles before strong assumptions can be made about a target population. 
+
+<br>
+<br>
+<br>
+<br>
+
+
