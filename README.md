@@ -1,2 +1,11 @@
-# Exploratory-Analysis-of-Survey-Data
-Here I use PCA, K-Means Cluster Analysis, and Kruskal-Wallis Rank Sum Test to analyze ordinal survey responses.
+### Introduction
+
+In an endless search for a competitive edge, companies are always looking for new ways to identify who their customers are, and what their customers are like. The ability to target individuals based on their demographic characteristics and their consumption patterns is referred to as targeted marketing. Due to the explosion of smartphones and online consumption, targeted marketing has become highly accessible. 
+
+One of the largest forms of consumption is entertainment---video being one of the most popular. Due to the increasing popularity of OTT streaming services like Hulu and YouTube, users log in before streaming content, meaning their identity is known, allowing the streaming service to serve highly targeted ads based on their personal profile and viewing history. Of course, cookies and IP addresses can be used to monitor users to a certain extent, but this limits the amount of information that can be assumed about them. 
+
+Marketing research firms continually search for new factors to explain consumer spending. For example, appearance-related spending is an important metric for segmenting high and low-value customers in the fashion and cosmetic industries. And with the increasing use of OTT services coupled with the high consumption of video content, understanding whether factors like movie preferences can explain spending habits is a worthwhile line of research.
+
+Streaming services already have their customers segmented by viewing preference, and brands may for example purchase ad space that targets segments with certain movie viewing histories and/or demographics. Thus, if movie genre preferences were obtained along with ratings about appearance-related spending, it is worth analyzing for possible insight that could potentially aid companies in the fashion and cosmetic industries. 
+
+In this repository I simulate such an analysis with survey data that was downloaded from kaggle.com, which is a website that hosts datasets and competitions related to machine learning and data science. The Young People Survey consists of movie genre ratings, as well as ratings about individual spending on appearance-related products. A total of 1010 Slovakian young adults were surveyed.
